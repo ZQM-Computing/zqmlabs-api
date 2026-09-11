@@ -1,0 +1,53 @@
+# Project Volusia — Docker Compose
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=/api
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    # Port 8000 intentionally NOT exposed — backend is internal-only,
+    # reached through nginx (frontend container) via Docker network.
+    # Cloudflare proxies to port 8080 (frontend/nginx).
+    # Exposing 8000 to the internet causes 502 errors and security risk.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONPATH=/app
+
+  # Optional: SearXNG for self-hosted search
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "8081:8080"
+    environment:
+      - INSTANCE_NAME=volusia-search
+    volumes:
+      - searxng-data:/etc/searxng
+    restart: unless-stopped
+    profiles:
+      - search
+
+volumes:
+  searxng-data:
